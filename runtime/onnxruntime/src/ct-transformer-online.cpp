@@ -11,7 +11,7 @@ CTTransformerOnline::CTTransformerOnline()
 {
 }
 
-void CTTransformerOnline::InitPunc(const std::string &punc_model, const std::string &punc_config, int thread_num){
+void CTTransformerOnline::InitPunc(const std::string &punc_model, const std::string &punc_config, const std::string &token_file, int thread_num){
     session_options.SetIntraOpNumThreads(thread_num);
     session_options.SetGraphOptimizationLevel(ORT_ENABLE_ALL);
     session_options.DisableCpuMemArena();
@@ -43,7 +43,7 @@ void CTTransformerOnline::InitPunc(const std::string &punc_model, const std::str
     for (auto& item : m_strOutputNames)
         m_szOutputNames.push_back(item.c_str());
 
-	m_tokenizer.OpenYaml(punc_config.c_str());
+	m_tokenizer.OpenYaml(punc_config.c_str(), token_file.c_str());
 }
 
 CTTransformerOnline::~CTTransformerOnline()
@@ -120,9 +120,9 @@ string CTTransformerOnline::AddPunc(const char* sz_input, vector<string> &arr_ca
     vector<string> WordWithPunc;
     for (int i = 0; i < sentence_words_list.size(); i++) // for i in range(0, len(sentence_words_list)):
     {
-        if (i > 0 && !(sentence_words_list[i][0] & 0x80) && (i + 1) < sentence_words_list.size() && !(sentence_words_list[i + 1][0] & 0x80))
+        if (!(sentence_words_list[i][0] & 0x80) && (i + 1) < sentence_words_list.size() && !(sentence_words_list[i + 1][0] & 0x80))
         {
-            sentence_words_list[i] = sentence_words_list[i] + " ";
+            sentence_words_list[i] = " " + sentence_words_list[i];
         }
         if (nSkipNum < arr_cache.size())  //    if skip_num < len(cache):
             nSkipNum++;

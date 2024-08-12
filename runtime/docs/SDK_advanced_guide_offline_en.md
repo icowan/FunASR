@@ -6,6 +6,8 @@ This document serves as a development guide for the FunASR offline file transcri
 
 | TIME       | INFO                                    | IMAGE VERSION                   | IMAGE ID     |
 |------------|-----------------------------------------|---------------------------------|--------------|
+| 2024.05.15 | Adapting to FunASR 1.0 model structure | funasr-runtime-sdk-en-cpu-0.1.6 | 84d781d07997 |
+| 2024.03.05 | docker image supports ARM64 platform, update modelscope | funasr-runtime-sdk-en-cpu-0.1.5 | 7cca2abc5901 |
 | 2024.01.25 | Optimized the VAD (Voice Activity Detection) data processing method, significantly reducing peak memory usage; memory leak optimization| funasr-runtime-sdk-en-cpu-0.1.3 | c00f9ce7a195 |
 | 2024.01.03 | fixed known crash issues as well as memory leak problems | funasr-runtime-sdk-en-cpu-0.1.2 | 0cdd9f4a4bb5 |
 | 2023.11.08 | Adaptation to runtime structure changes | funasr-runtime-sdk-en-cpu-0.1.1 | 27017f70f72a |
@@ -23,9 +25,9 @@ If you do not have Docker installed, please refer to [Docker Installation](https
 ### Pulling and launching images
 Use the following command to pull and launch the Docker image for the FunASR runtime-SDK:
 ```shell
-sudo docker pull registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-en-cpu-0.1.4
+sudo docker pull registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-en-cpu-0.1.6
 
-sudo docker run -p 10097:10095 -it --privileged=true -v /root:/workspace/models registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-en-cpu-0.1.4
+sudo docker run -p 10097:10095 -it --privileged=true -v /root:/workspace/models registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-en-cpu-0.1.6
 ```
 Introduction to command parameters: 
 ```text
@@ -113,7 +115,7 @@ After completing the deployment of FunASR offline file transcription service on 
 
 ### python-client
 ```shell
-python funasr_wss_client.py --host "127.0.0.1" --port 10095 --mode offline --audio_in "./data/wav.scp" --send_without_sleep --output_dir "./results"
+python funasr_wss_client.py --host "127.0.0.1" --port 10097 --mode offline --audio_in "./data/wav.scp" --send_without_sleep --output_dir "./results"
 ```
 
 Introduction to command parameters:
@@ -131,7 +133,7 @@ Introduction to command parameters:
 
 ### c++-client
 ```shell
-. /funasr-wss-client --server-ip 127.0.0.1 --port 10095 --wav-path test.wav --thread-num 1 --is-ssl 1
+. /funasr-wss-client --server-ip 127.0.0.1 --port 10097 --wav-path test.wav --thread-num 1 --is-ssl 1
 ```
 
 Introduction to command parameters:

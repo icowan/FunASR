@@ -7,112 +7,96 @@ import logging
 import torch
 import torch.nn
 import torch.optim
+import pdb
 
-
-def filter_state_dict(
-	dst_state: Dict[str, Union[float, torch.Tensor]],
-	src_state: Dict[str, Union[float, torch.Tensor]],
-):
-	"""Filter name, size mismatch instances between dicts.
-
-	Args:
-		dst_state: reference state dict for filtering
-		src_state: target state dict for filtering
-
-	"""
-	match_state = {}
-	for key, value in src_state.items():
-		if key in dst_state and (dst_state[key].size() == src_state[key].size()):
-			match_state[key] = value
-		else:
-			if key not in dst_state:
-				logging.warning(
-					f"Filter out {key} from pretrained dict"
-					+ " because of name not found in target dict"
-				)
-			else:
-				logging.warning(
-					f"Filter out {key} from pretrained dict"
-					+ " because of size mismatch"
-					+ f"({dst_state[key].size()}-{src_state[key].size()})"
-				)
-	return match_state
-
-def assigment_scope_map(dst_state: dict, src_state: dict, scope_map: str=None):
-	"""Compute the union of the current variables and checkpoint variables."""
-	import collections
-	import re
-
-	# current model variables
-	name_to_variable = collections.OrderedDict()
-	for name, var in dst_state.items():
-		name_to_variable[name] = var
-	
-	scope_map_num = 0
-	if scope_map is not None:
-		scope_map = scope_map.split(",")
-		scope_map_num = len(scope_map) // 2
-		for scope_map_idx in range(scope_map_num):
-			scope_map_id = scope_map_idx * 2
-			logging.info('assignment_map from scope {} to {}'.format(scope_map[scope_map_id], scope_map[scope_map_id+1]))
-	
-	assignment_map = {}
-	for name, var in src_state.items():
-
-		if scope_map:
-			for scope_map_idx in range(scope_map_num):
-				scope_map_id = scope_map_idx * 2
-				try:
-					idx = name.index(scope_map[scope_map_id])
-					new_name = scope_map[scope_map_id+1] + name[idx + len(scope_map[scope_map_id]):]
-					if new_name in name_to_variable:
-						assignment_map[name] = var
-				except:
-					continue
-		else:
-			if name in name_to_variable:
-				assignment_map[name] = var
-	
-	return assignment_map
 
 def load_pretrained_model(
-	path: str,
-	model: torch.nn.Module,
-	ignore_init_mismatch: bool,
-	map_location: str = "cpu",
-	oss_bucket=None,
-	scope_map=None,
-	excludes=None,
+    path: str,
+    model: torch.nn.Module,
+    ignore_init_mismatch: bool = True,
+    map_location: str = "cpu",
+    oss_bucket=None,
+    scope_map=[],
+    excludes=None,
+    **kwargs,
 ):
-	"""Load a model state and set it to the model.
+    """Load a model state and set it to the model.
 
-	Args:
-		init_param: <file_path>:<src_key>:<dst_key>:<exclude_Keys>
+    Args:
+            init_param: <file_path>:<src_key>:<dst_key>:<exclude_Keys>
 
-	Examples:
+    Examples:
 
-	"""
-	
-	obj = model
-	
-	if oss_bucket is None:
-		src_state = torch.load(path, map_location=map_location)
-	else:
-		buffer = BytesIO(oss_bucket.get_object(path).read())
-		src_state = torch.load(buffer, map_location=map_location)
-	src_state = src_state["model"] if "model" in src_state else src_state
-	
-	if excludes is not None:
-		for e in excludes.split(","):
-			src_state = {k: v for k, v in src_state.items() if not k.startswith(e)}
-	
-	dst_state = obj.state_dict()
-	src_state = assigment_scope_map(dst_state, src_state, scope_map)
-	
-	if ignore_init_mismatch:
-		src_state = filter_state_dict(dst_state, src_state)
-	
-	logging.debug("Loaded src_state keys: {}".format(src_state.keys()))
-	logging.debug("Loaded dst_state keys: {}".format(dst_state.keys()))
-	dst_state.update(src_state)
-	obj.load_state_dict(dst_state, strict=True)
+    """
+
+    obj = model
+    dst_state = obj.state_dict()
+
+    logging.info(f"ckpt: {path}")
+
+    if oss_bucket is None:
+        src_state = torch.load(path, map_location=map_location)
+    else:
+        buffer = BytesIO(oss_bucket.get_object(path).read())
+        src_state = torch.load(buffer, map_location=map_location)
+
+    src_state = src_state["state_dict"] if "state_dict" in src_state else src_state
+    src_state = src_state["model_state_dict"] if "model_state_dict" in src_state else src_state
+    src_state = src_state["model"] if "model" in src_state else src_state
+
+    if isinstance(scope_map, str):
+        scope_map = scope_map.split(",")
+    scope_map += ["module.", "None"]
+    logging.info(f"scope_map: {scope_map}")
+
+    if excludes is not None:
+        if isinstance(excludes, str):
+            excludes = excludes.split(",")
+
+    logging.info(f"excludes: {excludes}")
+
+    for k in dst_state.keys():
+        excludes_flag = False
+        if excludes is not None:
+            for k_ex in excludes:
+                if k.startswith(k_ex):
+                    logging.info(f"key: {k} matching: {k_ex}, excluded")
+                    excludes_flag = True
+                    break
+        if excludes_flag:
+            continue
+
+        k_src = k
+
+        if scope_map is not None:
+            src_prefix = ""
+            dst_prefix = ""
+            for i in range(0, len(scope_map), 2):
+                src_prefix = scope_map[i] if scope_map[i].lower() != "none" else ""
+                dst_prefix = scope_map[i + 1] if scope_map[i + 1].lower() != "none" else ""
+
+                if dst_prefix == "" and (src_prefix + k) in src_state.keys():
+                    k_src = src_prefix + k
+                    if not k_src.startswith("module."):
+                        logging.info(f"init param, map: {k} from {k_src} in ckpt")
+                elif (
+                    k.startswith(dst_prefix)
+                    and k.replace(dst_prefix, src_prefix, 1) in src_state.keys()
+                ):
+                    k_src = k.replace(dst_prefix, src_prefix, 1)
+                    if not k_src.startswith("module."):
+                        logging.info(f"init param, map: {k} from {k_src} in ckpt")
+
+        if k_src in src_state.keys():
+            if ignore_init_mismatch and dst_state[k].shape != src_state[k_src].shape:
+                logging.info(
+                    f"ignore_init_mismatch:{ignore_init_mismatch}, dst: {k, dst_state[k].shape}, src: {k_src, src_state[k_src].shape}"
+                )
+            else:
+                dst_state[k] = src_state[k_src]
+
+        else:
+            print(f"Warning, miss key in ckpt: {k}, {path}")
+
+    flag = obj.load_state_dict(dst_state, strict=True)
+    logging.info(f"Loading ckpt: {path}, status: {flag}")
